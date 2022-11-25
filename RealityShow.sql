@@ -1,3 +1,4 @@
+DROP DATABASE IF EXISTS REALITYSHOW;
 CREATE DATABASE REALITYSHOW;
 
 USE REALITYSHOW;
@@ -46,6 +47,12 @@ CREATE TABLE Mentor
                 REFERENCES Person(ssn)
 );
 
+CREATE TABLE Singer
+(
+    ssn         CHAR(12) PRIMARY KEY,
+    guest_id    INT
+);
+
 CREATE TABLE Song
 (
     number          VARCHAR(5) PRIMARY KEY,
@@ -63,30 +70,32 @@ CREATE TABLE ThemeSong
                     REFERENCES Song(number)
 );
 
+CREATE TABLE SongWriter
+(
+    ssn         CHAR(12) PRIMARY KEY,
+    CONSTRAINT  fk_songwriter_ssn FOREIGN KEY(ssn)
+                REFERENCES Mentor(ssn)
+);
+
 CREATE TABLE SongComposedBy
 (
-    song_id         VARCHAR(5) PRIMARY KEY,
-    composer_ssn    CHAR(12) PRIMARY KEY,
+    song_id         VARCHAR(5),
+    composer_ssn    CHAR(12),
     CONSTRAINT      fk_composed_song_id FOREIGN KEY (song_id)
                     REFERENCES Song(number),
     CONSTRAINT      fk_song_composer_ssn FOREIGN KEY (composer_ssn)
-                    REFERENCES SongWriter(ssn)
+                    REFERENCES SongWriter(ssn),
+    PRIMARY KEY (song_id, composer_ssn)
 );
 
-
-
-CREATE TABLE Singer
-(
-    ssn         CHAR(12) PRIMARY KEY,
-    guest_id    INT
-);
 
 CREATE TABLE SingerSignatureSong
 (
-    ssn         CHAR(12) PRIMARY KEY,
-    song_name   VARCHAR(20) PRIMARY KEY,
+    ssn         CHAR(12),
+    song_name   VARCHAR(20),
     CONSTRAINT  fk_singer_song_ssn FOREIGN KEY(ssn)
-                REFERENCES Singer(ssn)
+                REFERENCES Singer(ssn),
+    PRIMARY KEY (ssn, song_name)
 );
 
 CREATE TABLE Producer
@@ -98,18 +107,14 @@ CREATE TABLE Producer
 
 CREATE TABLE ProducerProgram
 (
-    ssn             CHAR(12) PRIMARY KEY,
-    program_name    VARCHAR(20) PRIMARY KEY,
+    ssn             CHAR(12),
+    program_name    VARCHAR(20),
     CONSTRAINT      fk_producer_program_ssn FOREIGN KEY (ssn)
-                    REFERENCES Producer(ssn)
+                    REFERENCES Producer(ssn),
+    PRIMARY KEY (ssn, program_name)
 );
 
-CREATE TABLE SongWriter
-(
-    ssn         CHAR(12) PRIMARY KEY,
-    CONSTRAINT  fk_songwriter_ssn FOREIGN KEY(ssn)
-                REFERENCES Mentor(ssn)
-);
+
 
 CREATE TABLE Season
 (
@@ -125,29 +130,31 @@ CREATE TABLE Season
 
 CREATE TABLE SeasonMentor
 (
-    year        YEAR PRIMARY KEY,
-    ssn_mentor  CHAR(12) PRIMARY KEY,
+    year        YEAR,
+    ssn_mentor  CHAR(12),
     CONSTRAINT  fk_season_mentor_year FOREIGN KEY (year)
                 REFERENCES Season(year),
     CONSTRAINT  fk_season_mentor_ssn FOREIGN KEY (ssn_mentor)
-                REFERENCES Mentor(ssn)
+                REFERENCES Mentor(ssn),
+    PRIMARY KEY (year, ssn_mentor)
 );
 
 CREATE TABLE SeasonTrainee
 (
-    year        YEAR PRIMARY KEY,
-    ssn_trainee  CHAR(12) PRIMARY KEY,
+    year        YEAR,
+    ssn_trainee  CHAR(12),
     CONSTRAINT  fk_season_trainee_year FOREIGN KEY (year)
                 REFERENCES Season(year),
     CONSTRAINT  fk_season_trainee_ssn FOREIGN KEY (ssn_trainee)
-                REFERENCES Trainee(ssn)
+                REFERENCES Trainee(ssn),
+    PRIMARY KEY (year, ssn_trainee)
 );
 
 CREATE TABLE MentorValuateTrainee
 (
-    year        YEAR PRIMARY KEY,
-    ssn_trainee CHAR(12) PRIMARY KEY,
-    ssn_mentor  CHAR(12) PRIMARY KEY,
+    year        YEAR,
+    ssn_trainee CHAR(12),
+    ssn_mentor  CHAR(12),
     score       INT,
     CONSTRAINT  fk_valuate_year FOREIGN KEY(year)
                 REFERENCES Season(year),
@@ -155,57 +162,55 @@ CREATE TABLE MentorValuateTrainee
                 REFERENCES Trainee(ssn),
     CONSTRAINT  fk_valuate_mentor_ssn FOREIGN KEY (ssn_mentor)
                 REFERENCES Mentor(ssn),
-    CONSTRAINT  score_constraint CHECK ( score >= 0 AND score <= 100 )
+    CONSTRAINT  score_constraint CHECK ( score >= 0 AND score <= 100 ),
+    PRIMARY KEY (year, ssn_trainee, ssn_mentor)
 );
 
 CREATE TABLE Episode
 (
-    year        YEAR PRIMARY KEY,
-    no          INT PRIMARY KEY,
+    year        YEAR,
+    no          INT,
     name        VARCHAR(20),
     datetime    DATETIME,
     duration    INT,
     CONSTRAINT  fk_episode_year FOREIGN KEY (year)
                 REFERENCES Season(year),
-    CONSTRAINT  episode_constraint CHECK ( no >= 1 AND no <= 5 )
+    CONSTRAINT  episode_constraint CHECK ( no >= 1 AND no <= 5 ),
+    PRIMARY KEY (year, no)
 );
 
 CREATE TABLE Stage
 (
-    year        YEAR PRIMARY KEY,
-    ep_no       INT PRIMARY KEY,
-    stage_no    INT PRIMARY KEY,
+    year        YEAR,
+    ep_no       INT,
+    stage_no    INT,
     is_group    BOOLEAN NOT NULL,
     skill       INT DEFAULT 4,
     total_vote  INT,
     song_id     VARCHAR(5),
-    CONSTRAINT  fk_stage_year FOREIGN KEY (year)
-                REFERENCES Episode(year),
-    CONSTRAINT  fk_stage_ep_no FOREIGN KEY (ep_no)
-                REFERENCES Episode(no),
+    CONSTRAINT  fk_stage_year_ep_no FOREIGN KEY (year, ep_no)
+                REFERENCES Episode(year, no),
     CONSTRAINT  fk_stage_song_id FOREIGN KEY (song_id)
                 REFERENCES Song(number),
     CONSTRAINT  skill_constraint CHECK ( skill >= 1 AND skill <= 4 ),
+    PRIMARY KEY (year, ep_no, stage_no)
 );
 
 CREATE TABLE StageIncludeTrainee
 (
-    year        YEAR PRIMARY KEY,
-    ep_no       INT PRIMARY KEY,
-    stage_no    INT PRIMARY KEY,
-    ssn_trainee CHAR(12) PRIMARY KEY,
+    year        YEAR,
+    ep_no       INT,
+    stage_no    INT,
+    ssn_trainee CHAR(12),
     role        INT DEFAULT 1,
     no_of_votes INT,
-    CONSTRAINT  fk_stage_trainee_year FOREIGN KEY (year)
-                REFERENCES Stage(year),
-    CONSTRAINT  fk_stage_trainee_ep_no FOREIGN KEY (ep_no)
-                REFERENCES Stage(ep_no),
-    CONSTRAINT  fk_stage_trainee_stage_no FOREIGN KEY (stage_no)
-                REFERENCES Stage(stage_no),
+    CONSTRAINT  fk_stage_trainee_year FOREIGN KEY (year, ep_no, stage_no)
+                REFERENCES Stage(year, ep_no, stage_no),
     CONSTRAINT  fk_stage_trainee_ssn FOREIGN KEY (ssn_trainee)
                 REFERENCES Trainee(ssn),
     CONSTRAINT  role_constraint CHECK ( role >= 1 AND role <= 3 ),
-    CONSTRAINT  votes_constraint CHECK ( no_of_votes >= 0 AND no_of_votes <= 500 )
+    CONSTRAINT  votes_constraint CHECK ( no_of_votes >= 0 AND no_of_votes <= 500 ),
+    PRIMARY KEY (year, ep_no, stage_no, ssn_trainee)
 );
 
 CREATE TABLE InvitedGuest
@@ -225,24 +230,37 @@ CREATE TABLE GuestGroup
 
 CREATE TABLE GroupSignatureSong
 (
-    gname       VARCHAR(20) PRIMARY KEY,
-    song_name   VARCHAR(20) PRIMARY KEY,
+    gname       VARCHAR(20),
+    song_name   VARCHAR(20),
     CONSTRAINT  fk_group_song_gname FOREIGN KEY (gname)
-                REFERENCES GuestGroup(gname)
+                REFERENCES GuestGroup(gname),
+    PRIMARY KEY (gname, song_name)
 );
 
 CREATE TABLE GuestSupportStage
 (
     guest_id    INT,
-    year        YEAR PRIMARY KEY,
-    ep_no       INT PRIMARY KEY,
-    stage_no    INT PRIMARY KEY,
+    year        YEAR,
+    ep_no       INT,
+    stage_no    INT,
     CONSTRAINT  fk_support_guest_id FOREIGN KEY (guest_id)
                 REFERENCES InvitedGuest(guest_id),
-    CONSTRAINT  fk_support_year FOREIGN KEY (year)
-                REFERENCES Stage(year),
-    CONSTRAINT  fk_support_ep_no FOREIGN KEY (ep_no)
-                REFERENCES Stage(ep_no),
-    CONSTRAINT  fk_support_stage_no FOREIGN KEY (stage_no)
-                REFERENCES Stage(stage_no),
-)
+    CONSTRAINT  fk_support_year FOREIGN KEY (year, ep_no, stage_no)
+                REFERENCES Stage(year, ep_no, stage_no),
+    PRIMARY KEY (year, ep_no, stage_no)
+);
+
+CREATE TABLE Song_seq
+(
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY
+);
+
+DELIMITER //
+CREATE TRIGGER Song_insert
+BEFORE INSERT ON Song
+FOR EACH ROW
+BEGIN
+  INSERT INTO Song_seq VALUES (NULL);
+  SET NEW.number = CONCAT('S', LAST_INSERT_ID());
+END//
+DELIMITER ;
