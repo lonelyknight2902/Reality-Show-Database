@@ -2,10 +2,17 @@
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
     <data-source source="LOCAL" name="MySQL Socket - @localhost" uuid="c8e2acb1-394c-4daa-91b8-45ebc8495cd1">
-      <driver-ref>e4a6c9d3-adc0-4e86-ae9f-a048129895d2</driver-ref>
+      <driver-ref>mysql.8</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
       <jdbc-url>jdbc:mysql://localhost:3306</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
+    <data-source source="LOCAL" name="MySQL" uuid="c6fd5e97-850f-4051-9340-03b5e9813201">
+      <driver-ref>mysql.8</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
+      <jdbc-url>jdbc:mysql://(protocol=pipe)(path=\\.\pipe\MySQL)</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
   </component>
