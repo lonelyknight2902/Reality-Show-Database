@@ -1,11 +1,10 @@
 DROP DATABASE IF EXISTS REALITYSHOW;
 CREATE DATABASE REALITYSHOW;
 
---@block
 USE REALITYSHOW;
---@block
 
-DROP TABLE IF EXISTS Company;
+-- =====================CREATE========================
+
 CREATE TABLE Company
 (
     cnumber     CHAR(4) PRIMARY KEY,
@@ -14,7 +13,6 @@ CREATE TABLE Company
     edate       DATE
 );
 
-DROP TABLE IF EXISTS Person;
 CREATE TABLE Person
 (
     ssn         CHAR(12) PRIMARY KEY,
@@ -24,7 +22,6 @@ CREATE TABLE Person
     phone       CHAR(10) UNIQUE NOT NULL
 );
 
-DROP TABLE IF EXISTS Trainee;
 CREATE TABLE Trainee
 (
     ssn         CHAR(12) PRIMARY KEY,
@@ -57,7 +54,6 @@ CREATE TABLE Singer
     guest_id    INT
 );
 
-DROP TABLE IF EXISTS Song;
 CREATE TABLE Song
 (
     number          VARCHAR(5) PRIMARY KEY,
@@ -93,11 +89,10 @@ CREATE TABLE SongComposedBy
     PRIMARY KEY (song_id, composer_ssn)
 );
 
-
 CREATE TABLE SingerSignatureSong
 (
     ssn         CHAR(12),
-    song_name   VARCHAR(20),
+    song_name   VARCHAR(50),
     CONSTRAINT  fk_singer_song_ssn FOREIGN KEY(ssn)
                 REFERENCES Singer(ssn),
     PRIMARY KEY (ssn, song_name)
@@ -113,7 +108,7 @@ CREATE TABLE Producer
 CREATE TABLE ProducerProgram
 (
     ssn             CHAR(12),
-    program_name    VARCHAR(20),
+    program_name    VARCHAR(50),
     CONSTRAINT      fk_producer_program_ssn FOREIGN KEY (ssn)
                     REFERENCES Producer(ssn),
     PRIMARY KEY (ssn, program_name)
@@ -175,7 +170,7 @@ CREATE TABLE Episode
 (
     year        YEAR,
     no          INT,
-    name        VARCHAR(20),
+    name        VARCHAR(50),
     datetime    DATETIME,
     duration    INT,
     CONSTRAINT  fk_episode_year FOREIGN KEY (year)
@@ -255,13 +250,15 @@ CREATE TABLE GuestSupportStage
     PRIMARY KEY (year, ep_no, stage_no)
 );
 
-DROP TABLE IF EXISTS Song_seq;
 CREATE TABLE Song_seq
 (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY
 );
 
-DROP TRIGGER IF EXISTS Song_insert;
+-- =====================CREATE========================
+
+-- =====================TRIGGER========================
+
 DELIMITER //
 CREATE TRIGGER Song_insert
 BEFORE INSERT ON Song
@@ -272,10 +269,94 @@ BEGIN
 END//
 DELIMITER ;
 
--- @block
+DELIMITER //
+CREATE TRIGGER Stage_total_vote_insert
+    AFTER INSERT ON StageIncludeTrainee
+    FOR EACH ROW
+    BEGIN
+        DECLARE vote INT;
+
+        SELECT SUM(no_of_votes)
+            INTO vote
+        FROM StageIncludeTrainee
+            WHERE (year = NEW.year AND ep_no = NEW.ep_no AND stage_no = NEW.stage_no);
+
+        UPDATE Stage SET total_vote = vote WHERE (year = NEW.year AND ep_no = NEW.ep_no AND stage_no = NEW.stage_no);
+    end //
+DELIMITER ;
+
+DELIMITER //
+CREATE TRIGGER Stage_total_vote_update
+    AFTER UPDATE ON StageIncludeTrainee
+    FOR EACH ROW
+    BEGIN
+        DECLARE vote INT;
+
+        SELECT SUM(no_of_votes)
+            INTO vote
+        FROM StageIncludeTrainee
+            WHERE (year = NEW.year AND ep_no = NEW.ep_no AND stage_no = NEW.stage_no);
+
+        UPDATE Stage SET total_vote = vote WHERE (year = NEW.year AND ep_no = NEW.ep_no AND stage_no = NEW.stage_no);
+    end //
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS no_of_stage_of_trainee;
+DELIMITER //
+CREATE TRIGGER no_of_stage_of_trainee
+    BEFORE INSERT ON StageIncludeTrainee
+    FOR EACH ROW
+    BEGIN
+        DECLARE is_group BOOL;
+        IF NEW.ep_no = 2 OR NEW.ep_no = 3 OR NEW.ep_no = 4 THEN
+             IF (SELECT COUNT(*) FROM StageIncludeTrainee AS S WHERE S.year = NEW.year AND S.ep_no = NEW.ep_no AND S.ssn_trainee = NEW.ssn_trainee) = 1 THEN
+                 SIGNAL SQLSTATE '45000'
+                    SET MESSAGE_TEXT = 'This trainee has already performed in a group stage in this episode';
+             END IF;
+        ELSEIF NEW.ep_no = 5 THEN
+            SELECT Stage.is_group INTO is_group  FROM Stage WHERE Stage.year = NEW.year AND Stage.ep_no = NEW.ep_no AND Stage.stage_no = NEW.stage_no;
+            IF (SELECT COUNT(*) FROM StageIncludeTrainee AS S, Stage WHERE S.year = NEW.year AND Stage.year = NEW.year AND S.ep_no = NEW.ep_no AND Stage.ep_no = NEW.ep_no AND S.stage_no = NEW.stage_no AND Stage.stage_no = NEW.stage_no AND S.ssn_trainee = NEW.ssn_trainee AND Stage.is_group = TRUE) = 1
+                AND is_group THEN
+                SIGNAL SQLSTATE '45000'
+                    SET MESSAGE_TEXT = 'This trainee has already performed in a group stage in this episode';
+            ELSEIF (SELECT COUNT(*) FROM StageIncludeTrainee AS S, Stage WHERE S.year = NEW.year AND Stage.year = NEW.year AND S.ep_no = NEW.ep_no AND Stage.ep_no = NEW.ep_no AND S.stage_no = NEW.stage_no AND Stage.stage_no = NEW.stage_no AND S.ssn_trainee = NEW.ssn_trainee AND Stage.is_group = FALSE) = 1
+                AND is_group = FALSE THEN
+                SIGNAL SQLSTATE '45000'
+                    SET MESSAGE_TEXT = 'This trainee has already performed in a individual stage in this episode';
+            end if;
+        END IF;
+    end//
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS Trainee_participation;
+DELIMITER //
+CREATE TRIGGER Trainee_participation
+BEFORE INSERT ON SeasonTrainee
+FOR EACH ROW
+BEGIN
+	DECLARE num_of_seasons INT;
+
+	SELECT COUNT(*)
+	    INTO num_of_seasons
+    FROM SeasonTrainee
+        WHERE ssn_trainee = NEW.ssn_trainee;
+
+	IF num_of_seasons = 3 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'This trainee has already participated in 3 seasons';
+    ELSEIF EXISTS(SELECT 1 FROM StageIncludeTrainee WHERE NEW.ssn_trainee = StageIncludeTrainee.ssn_trainee AND StageIncludeTrainee.ep_no = 5) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'This trainee has already participated in a debut night';
+    END IF;
+END//
+DELIMITER ;
+
+-- =====================TRIGGER========================
+
+-- =====================INSERT========================
+
 SET FOREIGN_KEY_CHECKS = 0;
 
-DELETE FROM Company;
 INSERT INTO Company VALUES ('C001', 'VNG', '02839623888', STR_TO_DATE ('09,09,2004','%d,%m,%Y')),
                            ('C002', 'Google LLC', '18004190157', STR_TO_DATE ('04,09,1998','%d,%m,%Y')),
                            ('C003', 'Meta', '17815754340', STR_TO_DATE ('04,02,2004','%d,%m,%Y')),
@@ -284,7 +365,7 @@ INSERT INTO Company VALUES ('C001', 'VNG', '02839623888', STR_TO_DATE ('09,09,20
                            ('C006', 'American Airlines', '18004337300', STR_TO_DATE ('15,04,1926','%d,%m,%Y')),
                            ('C007', 'Springfield Nuclear Power Plant', '18004324231', STR_TO_DATE ('29,01,1968','%d,%m,%Y')),
                            ('CC08', 'Quahog Police Department', '18001324323', STR_TO_DATE ('05,01,1756','%d,%m,%Y'));
-DELETE FROM Person;
+
 INSERT INTO Person VALUES ('568470008000', 'Homer', 'Simpson', '742 Evergreen Terrace, Springfield', '9395550113'),
                           ('324461828345', 'Peter', 'Griffin', '31 Spooner Street, Quahog, RI', '9019225231'),
                           ('324294724455', 'Lois', 'Griffin', '31 Spooner Street, Quahog, RI', '6012981814'),
@@ -349,7 +430,6 @@ INSERT INTO Person VALUES ('568470008000', 'Homer', 'Simpson', '742 Evergreen Te
                           ('000000002146', 'Ezra', 'Sparks', NULL, '9635559390'),
                           ('000000003958', 'Elba', 'Kaufman', NULL, '9635559507');
 
-DELETE FROM Trainee;
 INSERT INTO Trainee VALUES ('568470008000', STR_TO_DATE ('12,05,1956','%d,%m,%Y'), 'https://www.gannett-cdn.com/-mm-/fd5c5b5393c72a785789f0cd5bd20acedd2d2804/c=0-350-2659-1850/local/-/media/Phoenix/BillGoodykoontz/2014/04/24//1398388295000-Homer-Simpson.jpg', 'C007'),
                            ('324461828345', STR_TO_DATE ('20,12,1956','%d,%m,%Y'), 'https://www.liveabout.com/thmb/APMQQFMHcHHnJyXnZntsFDu0RLo=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/peter_2008_v2F_hires1-56a00f083df78cafda9fdcb6.jpg', 'C005'),
                            ('324294724455', STR_TO_DATE ('03,06,1958','%d,%m,%Y'), 'https://ichef.bbci.co.uk/images/ic/1200x675/p05pkmhp.jpg', 'CC05'),
@@ -401,13 +481,11 @@ INSERT INTO Trainee VALUES ('568470008000', STR_TO_DATE ('12,05,1956','%d,%m,%Y'
                           ('000000002146', STR_TO_DATE ('14,08,2000','%d,%m,%Y'), NULL, 'CC04'),
                           ('000000003958', STR_TO_DATE ('13,02,1988','%d,%m,%Y'), NULL, 'CC04');
 
-DELETE FROM MC;
 INSERT INTO MC VALUES ('123430495834'),
                       ('232462736227'),
                       ('142456234424'),
                       ('165367734345');
 
-DELETE FROM Mentor;
 INSERT INTO Mentor VALUES ('125367424542'),
                           ('165779803235'),
                           ('653245653453'),
@@ -418,7 +496,6 @@ INSERT INTO Mentor VALUES ('125367424542'),
                           ('135332567745'),
                           ('175543236668');
 
-DELETE FROM Song;
 INSERT INTO Song(released_year, name, singer_ssn_first_performed) VALUES (2019, 'Are You Bored Yet?', '165779803235'),
                                                                          (1961, 'Meet the Flintstones', NULL),
                                                                          (1963, 'Surfin'' Bird', '934722246765'),
@@ -430,14 +507,30 @@ INSERT INTO Song(released_year, name, singer_ssn_first_performed) VALUES (2019, 
                                                                          (2022, 'Bùa Chú', NULL),
                                                                          (2016, 'The FCC Song', '439568723245'),
                                                                          (2014, 'Faded', NULL),
-                                                                         (2019, 'On My Way', NULL);
-DELETE FROM ThemeSong;
+                                                                         (2019, 'On My Way', NULL),
+                                                                         (2022, 'Tiny Love' , NULL),
+                                                                         (2008, 'Viva la Vida', NULL),
+                                                                         (2020, 'Tinder 101', NULL),
+                                                                         (2020, 'Crash My Car', NULL),
+                                                                         (1967, 'Can''t Take My Eyes Off You', NULL),
+                                                                         (2011, 'Goodbye', NULL),
+                                                                         (2015, 'Hymn For The Weekend', NULL),
+                                                                         (2019, 'Lover Boy', NULL),
+                                                                         (2010, 'What You Know', NULL),
+                                                                         (2010, 'Undercover Martyn', NULL),
+                                                                         (2015, 'The Less I Know The Better', NULL),
+                                                                         (2015, 'New Person, Same Old Mistakes', NULL),
+                                                                         (2017, 'Sugar for the Pill', NULL),
+                                                                         (2021, 'Catholic Country', NULL),
+                                                                         (2009, 'Rule My World', NULL),
+                                                                         (2004, 'Know How', NULL),
+                                                                         (2020, 'hey girl', NULL);
+
 INSERT INTO ThemeSong VALUES ('S7'),
                              ('S2'),
                              ('S8'),
                              ('S9');
 
-DELETE FROM SongComposedBy;
 INSERT INTO SongComposedBy VALUES ('S1', '165779803235'),
                                   ('S6', '653245653453'),
                                   ('S3', '934722246765'),
@@ -446,13 +539,15 @@ INSERT INTO SongComposedBy VALUES ('S1', '165779803235'),
                                   ('S11', '858294949452'),
                                   ('S12', '858294949452');
 
-DELETE FROM Singer;
 INSERT INTO Singer VALUES ('125367424542', 5),
                           ('165779803235', NULL),
                           ('653245653453', 6),
                           ('439568723245', NULL);
 
-INSERT INTO SingerSignatureSong VALUES ();
+INSERT INTO SingerSignatureSong VALUES ('125367424542', 'Happy'),
+                                       ('165779803235', 'Are You Bored Yet?'),
+                                       ('653245653453', 'Never Gonna Give You Up'),
+                                       ('439568723245', 'Theme from "Family Guy"');
 
 INSERT INTO Producer VALUES ('439568723245'),
                             ('122322345434'),
@@ -576,7 +671,6 @@ INSERT INTO SeasonTrainee VALUES (2021, '568470008000'),
                                  (2022, '000000002146'),
                                  (2022, '000000003958');
 
-DELETE FROM MentorValuateTrainee;
 INSERT INTO MentorValuateTrainee VALUES (2021, '568470008000', '165779803235', 50),
                                         (2021, '568470008000', '439568723245', 60),
                                         (2021, '568470008000', '934722246765', 60),
@@ -1047,8 +1141,6 @@ INSERT INTO MentorValuateTrainee VALUES (2021, '568470008000', '165779803235', 5
                                         (2022, '000000003958', '934722246765', 59),
                                         (2022, '000000003958', '175543236668', 58);
 
-SELECT year, ssn_trainee ,SUM(score) AS total_score FROM MentorValuateTrainee GROUP BY year, ssn_trainee ORDER BY year, total_score DESC;
-
 INSERT INTO Episode VALUES (2021, 1, 'Chitty Chitty Death Bang', STR_TO_DATE ('03,10,2021','%d,%m,%Y'), 60),
                            (2021, 2, 'Fifteen Minutes of Shame', STR_TO_DATE ('10,10,2021','%d,%m,%Y'), 90),
                            (2021, 3, 'Hannah Banana', STR_TO_DATE ('17,10,2021','%d,%m,%Y'), 90),
@@ -1059,22 +1151,6 @@ INSERT INTO Episode VALUES (2021, 1, 'Chitty Chitty Death Bang', STR_TO_DATE ('0
                            (2022, 3, 'American Gigg-olo', STR_TO_DATE ('16,10,2022','%d,%m,%Y'), 90),
                            (2022, 4, 'Switch the Flip', STR_TO_DATE ('23,10,2022','%d,%m,%Y'), 90),
                            (2022, 5, 'Bend or Blockbuster', STR_TO_DATE ('30,10,2022','%d,%m,%Y'), 180);
-
-DELIMITER //
-CREATE TRIGGER Stage_total_vote
-    BEFORE INSERT ON Stage
-    FOR EACH ROW
-    BEGIN
-        DECLARE vote INT;
-
-        SELECT SUM(no_of_votes)
-            INTO vote
-        FROM StageIncludeTrainee
-            WHERE (ep_no = NEW.ep_no AND stage_no = NEW.stage_no);
-
-        SET total_vote = vote;
-    end //
-DELIMITER ;
 
 INSERT INTO Stage(year, ep_no, stage_no, is_group, skill, song_id) VALUES (2021, 1, 1, FALSE, 4, 'S7'),
                                                                           (2021, 2, 1, TRUE, 1, 'S6'),
@@ -1087,25 +1163,24 @@ INSERT INTO Stage(year, ep_no, stage_no, is_group, skill, song_id) VALUES (2021,
                                                                           (2021, 3, 2, TRUE, 4, 'S1'),
                                                                           (2021, 3, 3, TRUE, 4, 'S8'),
                                                                           (2021, 3, 4, TRUE, 4, 'S8'),
-                                                                          (2021, 4, 1, TRUE, 4, ''),
-                                                                          (2021, 4, 2, TRUE, 4, ''),
-                                                                          (2021, 4, 3, TRUE, 4, ''),
-                                                                          (2021, 4, 4, TRUE, 4, ''),
-                                                                          (2021, 5, 1, TRUE, 4, ''),
-                                                                          (2021, 5, 2, TRUE, 4, ''),
-                                                                          (2021, 5, 3, FALSE, 4, ''),
-                                                                          (2021, 5, 4, FALSE, 4, ''),
-                                                                          (2021, 5, 5, FALSE, 4, ''),
-                                                                          (2021, 5, 6, FALSE, 4, ''),
-                                                                          (2021, 5, 7, FALSE, 4, ''),
-                                                                          (2021, 5, 8, FALSE, 4, ''),
-                                                                          (2021, 5, 9, FALSE, 4, ''),
-                                                                          (2021, 5, 10, FALSE, 4, ''),
-                                                                          (2021, 5, 11, FALSE, 4, ''),
-                                                                          (2021, 5, 12, FALSE, 4, ''),
-                                                                          (2022, 1, 1, FALSE, 4, '');
+                                                                          (2021, 4, 1, TRUE, 4, 'S13'),
+                                                                          (2021, 4, 2, TRUE, 4, 'S14'),
+                                                                          (2021, 4, 3, TRUE, 4, 'S15'),
+                                                                          (2021, 4, 4, TRUE, 4, 'S16'),
+                                                                          (2021, 5, 1, TRUE, 4, 'S17'),
+                                                                          (2021, 5, 2, TRUE, 4, 'S18'),
+                                                                          (2021, 5, 3, FALSE, 4, 'S19'),
+                                                                          (2021, 5, 4, FALSE, 4, 'S20'),
+                                                                          (2021, 5, 5, FALSE, 4, 'S21'),
+                                                                          (2021, 5, 6, FALSE, 4, 'S22'),
+                                                                          (2021, 5, 7, FALSE, 4, 'S23'),
+                                                                          (2021, 5, 8, FALSE, 4, 'S24'),
+                                                                          (2021, 5, 9, FALSE, 4, 'S25'),
+                                                                          (2021, 5, 10, FALSE, 4, 'S26'),
+                                                                          (2021, 5, 11, FALSE, 4, 'S27'),
+                                                                          (2021, 5, 12, FALSE, 4, 'S28'),
+                                                                          (2022, 1, 1, FALSE, 4, 'S29');
 
-DELETE FROM StageIncludeTrainee;
 INSERT INTO StageIncludeTrainee VALUES (2021, 2, 1, '000000003095', 2, 482),
                                        (2021, 2, 1, '000000001824', 3, 413),
                                        (2021, 2, 1, '000000003547', 1, 231),
@@ -1210,13 +1285,9 @@ INSERT INTO StageIncludeTrainee VALUES (2021, 2, 1, '000000003095', 2, 482),
                                        (2021, 5, 11, '000000003903', 1, 369),
                                        (2021, 5, 12, '324461828345', 1, 298);
 
-SELECT ep_no, ssn_trainee, no_of_votes FROM StageIncludeTrainee WHERE ep_no=3 ORDER BY ep_no, no_of_votes DESC;
-SELECT stage_no,SUM(no_of_votes) AS total_vote FROM StageIncludeTrainee WHERE ep_no = 3 GROUP BY stage_no;
-SELECT stage_no, ssn_trainee, no_of_votes FROM StageIncludeTrainee WHERE ep_no = 3 ORDER BY stage_no, no_of_votes DESC;
-
-SELECT ssn_trainee, no_of_votes FROM StageIncludeTrainee WHERE ep_no = 4 ORDER BY no_of_votes DESC;
-
 INSERT INTO InvitedGuest VALUES (NULL),
+                                (NULL),
+                                (NULL),
                                 (NULL),
                                 (NULL),
                                 (NULL);
@@ -1231,37 +1302,70 @@ INSERT INTO GroupSignatureSong VALUES ('7UPPERCUTS', 'Wave Alpha'),
                                       ('Jaigon Orchestra', 'Nhu mì'),
                                       ('Cá Hồi Hoang', '5AM');
 
-INSERT INTO GuestSupportStage VALUES ()
+INSERT INTO GuestSupportStage VALUES (1, 2021, 4, 1),
+                                     (2, 2021, 4, 2),
+                                     (5, 2021, 4, 3),
+                                     (6, 2021, 4, 4);
 
 SET FOREIGN_KEY_CHECKS = 1;
--- @block
+
+-- =====================INSERT========================
+
+-- =====================STORED PROCEDURE========================
+
 DELIMITER //
-CREATE TRIGGER Trainee_participation
-BEFORE INSERT ON SeasonTrainee
-FOR EACH ROW
+CREATE PROCEDURE next_round_trainee(IN seasons_year INT, IN seasons_episode INT)
 BEGIN
-	DECLARE num_of_seasons INT;
-
-	SELECT COUNT(*)
-	    INTO num_of_seasons
-    FROM SeasonTrainee
-        WHERE ssn_trainee = NEW.ssn_trainee;
-
-	IF num_of_seasons = 3 THEN
-        SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'This trainee has already participated in 3 seasons';
-    ELSE IF EXISTS(SELECT 1 FROM StageIncludeTrainee WHERE NEW.ssn_trainee = StageIncludeTrainee.ssn_trainee AND StageIncludeTrainee.ep_no = 5) THEN
-        SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'This trainee has already participated in a debut night';
-    end if //
-END//
+    DECLARE g1 INT;
+    DECLARE g2 INT;
+    DECLARE g3 INT;
+    DECLARE g4 INT;
+    DECLARE lost1 INT;
+    DECLARE lost2 INT;
+    IF seasons_episode = 1 THEN
+        SELECT S.ssn_trainee AS ssn, Round(AVG(S.score),0) as avg_score FROM MentorValuateTrainee AS S WHERE S.year = seasons_year GROUP BY S.ssn_trainee ORDER BY avg_score DESC LIMIT 30;
+    ELSEIF seasons_episode = 2 THEN
+        SELECT S.ssn_trainee AS ssn, S.no_of_votes AS Num_of_votes FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND seasons_episode = S.ep_no ORDER BY S.no_of_votes DESC LIMIT 20;
+    ELSEIF seasons_episode = 3 THEN
+        SELECT SUM(S.no_of_votes) INTO g1 FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND  S.ep_no = 3 AND S.stage_no = 1;
+        SELECT SUM(S.no_of_votes) INTO g2 FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND  S.ep_no = 3 AND S.stage_no = 2;
+        SELECT SUM(S.no_of_votes) INTO g3 FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND  S.ep_no = 3 AND S.stage_no = 3;
+        SELECT SUM(S.no_of_votes) INTO g4 FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND  S.ep_no = 3 AND S.stage_no = 4;
+        IF g1 > g2 AND g3 > g4 THEN
+            SET lost1 = 2;
+            SET lost2 = 4;
+        ELSEIF g1 > g2 AND g3 < g4 THEN
+            SET lost1 = 2;
+            SET lost2 = 3;
+        ELSEIF g1 < g2 AND g3 > g4 THEN
+            SET lost1 = 1;
+            SET lost2 = 4;
+        ELSE
+            SET lost1 = 1;
+            SET lost2 = 3;
+        end if;
+        SELECT * FROM (SELECT S.ssn_trainee AS ssn, S.no_of_votes AS Num_of_votes FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND seasons_episode = S.ep_no) AS Trainee_list LEFT JOIN
+            ((SELECT S.ssn_trainee AS ssn, S.no_of_votes AS Num_of_votes FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND seasons_episode = S.ep_no AND S.stage_no = lost1 ORDER BY Num_of_votes LIMIT 2) UNION
+            (SELECT S.ssn_trainee AS ssn, S.no_of_votes AS Num_of_votes FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND seasons_episode = S.ep_no AND S.stage_no = lost2 ORDER BY Num_of_votes LIMIT 2)) AS Eliminated_list
+                USING (ssn, Num_of_votes)
+                WHERE Eliminated_list.ssn IS NULL AND Eliminated_list.Num_of_votes IS NULL;
+    ELSEIF seasons_episode = 4 THEN
+        SELECT S.ssn_trainee AS ssn, S.no_of_votes AS Num_of_votes FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND seasons_episode = S.ep_no ORDER BY S.no_of_votes DESC LIMIT 10;
+    ELSEIF seasons_episode = 5 THEN
+        SELECT S.ssn_trainee AS ssn, S.no_of_votes AS Num_of_votes FROM StageIncludeTrainee AS S, Stage WHERE (S.year = seasons_year AND S.ep_no = seasons_episode AND Stage.year = S.year AND Stage.ep_no = S.ep_no AND S.stage_no = Stage.stage_no AND Stage.is_group = FALSE) ORDER BY Num_of_votes DESC LIMIT 5;
+    end if;
+end //
 DELIMITER ;
 
 DELIMITER //
-CREATE TRIGGER Trainee_stage
-    BEFORE INSERT ON StageIncludeTrainee
-    FOR EACH ROW
-    BEGIN
-
-    end //
+CREATE PROCEDURE trainee_result(IN ssn CHAR(12), IN seasons_year INT)
+BEGIN
+    SELECT 1 AS Episode, Round(AVG(M.score),0) AS Num_of_votes_avg_score FROM MentorValuateTrainee AS M WHERE M.ssn_trainee = ssn GROUP BY M.ssn_trainee UNION
+    (SELECT S.ep_no AS Episode, SUM(S.no_of_votes) AS Num_of_votes_avg_score FROM StageIncludeTrainee AS S WHERE seasons_year = S.year AND S.ssn_trainee = ssn GROUP BY S.ep_no ORDER BY S.ep_no);
+end //
 DELIMITER ;
+
+CALL next_round_trainee(2021, 5);
+CALL trainee_result('000000002096', 2021);
+
+-- =====================STORED PROCEDURE========================
